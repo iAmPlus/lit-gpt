@@ -19,24 +19,24 @@ from lit_gpt.model import GPT, Config, Block
 from lit_gpt.tokenizer import Tokenizer
 from lit_gpt.utils import lazy_load, check_valid_checkpoint_dir, step_csv_logger, chunked_cross_entropy
 from lit_gpt.speed_monitor import SpeedMonitor, measure_flops, estimate_flops
-from scripts.prepare_alpaca import generate_prompt
+from scripts.prepare_tasks import generate_prompt_task
 
 eval_interval = 600
 save_interval = 1000
 eval_iters = 100
 log_interval = 1
-devices = 1
+devices = 8
 # change this value to force a maximum sequence length
-override_max_seq_length = None
+override_max_seq_length = 1024
 
 # Hyperparameters
-learning_rate = 3e-3
-batch_size = 64 / devices
-micro_batch_size = 1
+learning_rate = 2e-5
+batch_size = 128 / devices
+micro_batch_size = 2
 gradient_accumulation_iters = batch_size // micro_batch_size
 assert gradient_accumulation_iters > 0
-epoch_size = 50000  # train dataset size
-num_epochs = 5
+epoch_size = 200  # train dataset size
+num_epochs = 100
 max_iters = num_epochs * (epoch_size // micro_batch_size) // devices
 weight_decay = 0.02
 warmup_steps = 2 * (epoch_size // micro_batch_size) // devices // gradient_accumulation_iters # 2 epochs
@@ -45,9 +45,9 @@ hparams = {k: v for k, v in locals().items() if isinstance(v, (int, float, str))
 
 
 def setup(
-    data_dir: Path = Path("data/alpaca"),
-    checkpoint_dir: Path = Path("checkpoints/stabilityai/stablelm-base-alpha-3b"),
-    out_dir: Path = Path("out/full/alpaca"),
+    data_dir: Path = Path("data/task"),
+    checkpoint_dir: Path = Path("checkpoints/tiiuae/falcon-7b"),
+    out_dir: Path = Path("out/full/task/epoch100"),
     precision: Optional[str] = None,
     tpu: bool = False,
 ):
@@ -216,10 +216,10 @@ def validate(
     val_loss = losses.mean()
 
     # produce an example:
-    instruction = "Recommend a movie for me to watch during the weekend and explain the reason."
+    instruction = "Please find out the showtimes for the movie 'Frozen 2' and book 4 tickets for next Sunday afternoon."
     fabric.print(instruction)
-    sample = {"instruction": instruction, "input": ""}
-    prompt = generate_prompt(sample)
+    sample = {"input": instruction}
+    prompt = generate_prompt_task(sample)
     encoded = tokenizer.encode(prompt, device=model.device)
     max_returned_tokens = len(encoded) + 100
     output = generate(
